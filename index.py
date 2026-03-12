@@ -15,16 +15,15 @@ When a user request matches a skill:
 
 class SkillsPlugin(Plugin):
     skills: dict = {}  # key: skill_name, values: {description, folder path}
+    cwd: str = os.getcwd()
 
     async def on_start(self):
-        cwd = os.getcwd()
-        os.makedirs(f"{cwd}/skills", exist_ok=True)
+        os.makedirs(f"{self.cwd}/skills", exist_ok=True)
         self.prompt = SKILLS_PROMPT
         await self._scan_skills()
     
     async def _scan_skills(self):
-        cwd = os.getcwd()
-        skills_dir = f"{cwd}/skills"
+        skills_dir = f"{self.cwd}/skills"
         self.context.storage.set('skills', {})
         if not os.path.exists(skills_dir):
             self.context.log('info', 'No skills directory found.')
@@ -42,11 +41,11 @@ class SkillsPlugin(Plugin):
                             'path': skill_path
                         }
                         self.prompt += f"- {skill_info['name']}: {skill_info['description']}\n"
-                        self.context.storage.set("skills", self.skills)
                     else:
                         self.context.log('warning', f"Failed to parse SKILL.md for skill: {skill_dir}")
                 else:
                     self.context.log('warning', f"No SKILL.md found for skill: {skill_dir}")
+        self.context.storage.set("skills", self.skills)
         self.prompt += "---"
         self.context.storage.set('skills_prompt', self.prompt)
 
@@ -82,10 +81,10 @@ class SkillsPlugin(Plugin):
         if not skill_name:
             return 'Skill name is required.'
         cwd = os.getcwd()
-        skill_path = self.context.storage.get("skills", {}).get(skill_name, {}).get("path")
+        skill_path = self.context.storage.get("skills").get(skill_name).get("path")
         md_path = os.path.join(cwd, skill_path, 'SKILL.md') if skill_path else None
         if not os.path.exists(md_path):
-            return f'Skill "{skill_name}" not found.'
+            return None
         with open(md_path, 'r', encoding='utf-8') as f:
             return f.read()
 
@@ -95,6 +94,18 @@ class SkillsPlugin(Plugin):
 
     def get_tools(self):
         return [
+            {
+                'type': 'function',
+                'function': {
+                    'name': 'list_skills',
+                    'description': 'List all available skills',
+                    'parameters': {
+                        'type': 'object',
+                        'properties': {},
+                        'required': []
+                    }
+                }
+            },
             {
                 'type': 'function',
                 'function': {
@@ -159,65 +170,91 @@ class SkillsPlugin(Plugin):
     # ===== 工具执行 =====
 
     async def execute_tool(self, name, params):
-        if name == 'fetch_skill':
-            skill_name = params.get('skill_name', '').strip()
-            if not skill_name:
-                self.context.log('warning', 'fetch_skill called without skill_name')
-                return 'Skill name cannot be empty.'
-            skill_md = await self.get_skill_md(skill_name)
-            if not skill_md:
-                self.context.log('warning', f'Skill "{skill_name}" not found.')
-                return f'Skill "{skill_name}" not found.'
-            self.context.log('info', f'Fetched skill "{skill_name}" successfully.')
-            self.context.log('info', skill_md)
-            return skill_md
+        self.context.log('info', f'Executing tool: {name} with params: {params}')
+        if name == 'list_skills':
+            try:
+                skills = self.context.storage.get('skills')
+                if not skills:
+                    self.context.log('info', 'No skills available.')
+                    return 'No skills available.'
+                skill_list = '\n'.join([f"- {name}: {info['description']}" for name, info in skills.items()])
+                self.context.log('info', f'Available skills:\n{skill_list}')
+                return skill_list
+            except Exception as e:
+                self.context.log('error', f'Error listing skills: {e}')
+                return f'Error listing skills: {e}'
+        
+
+        elif name == 'fetch_skill':
+            try:
+                skill_name = params.get('skill_name', '').strip()
+                if not skill_name:
+                    self.context.log('warning', 'fetch_skill called without skill_name')
+                    return 'Skill name cannot be empty.'
+                skill_md = await self.get_skill_md(skill_name)
+                if not skill_md:
+                    self.context.log('warning', f'Skill "{skill_name}" not found.')
+                    return f'Skill "{skill_name}" not found.'
+                self.context.log('info', f'Fetched skill "{skill_name}" successfully.')
+                return skill_md
+            except Exception as e:
+                self.context.log('error', f'Error fetching skill "{skill_name}": {e}')
+                return f'Error fetching skill "{skill_name}": {e}'
         
 
         elif name == 'execute_skill_script':
-            skill_name = params.get('skill_name', '').strip()
-            script_name = params.get('script_name', '').strip()
-            if not skill_name or not script_name:
-                self.context.log('warning', 'execute_skill_script called without skill_name or script_name')
-                return 'Skill name and script name cannot be empty.'
-            skill_path = self.context.storage.get(f'skills', {}).get(skill_name, {}).get('path')
-            if not skill_path:
-                self.context.log('warning', f'Skill "{skill_name}" not found for executing script.')
-                return f'Skill "{skill_name}" not found.'
-            script_path = os.path.join(os.getcwd(), skill_path, 'scripts', script_name)
-            if not os.path.exists(script_path):
-                self.context.log('warning', f'Script "{script_name}" not found for skill "{skill_name}".')
-                return f'Script "{script_name}" not found for skill "{skill_name}".'
-
-            # 使用 subprocess 执行脚本
-
-            self.context.log('info', f'Executing script "{script_name}" for skill "{skill_name}".')
             try:
-                result = subprocess.run(['python', script_path], capture_output=True, text=True, check=True)
-                self.context.log('info', f'Script "{script_name}" executed successfully for skill "{skill_name}".')
-                return f'Script output:\n{result.stdout}'
-            except subprocess.CalledProcessError as e:
-                self.context.log('error', f'Error occurred while executing script "{script_name}" for skill "{skill_name}": {e}')
-                return f'Error occurred while executing script "{script_name}" for skill "{skill_name}": {e}'
+                skill_name = params.get('skill_name', '').strip()
+                script_name = params.get('script_name', '').strip()
+                if not skill_name or not script_name:
+                    self.context.log('warning', 'execute_skill_script called without skill_name or script_name')
+                    return 'Skill name and script name cannot be empty.'
+                skill_path = self.context.storage.get('skills').get(skill_name).get('path')
+                if not skill_path:
+                    self.context.log('warning', f'Skill "{skill_name}" not found for executing script.')
+                    return f'Skill "{skill_name}" not found.'
+                script_path = os.path.join(os.getcwd(), skill_path, 'scripts', script_name)
+                if not os.path.exists(script_path):
+                    self.context.log('warning', f'Script "{script_name}" not found for skill "{skill_name}".')
+                    return f'Script "{script_name}" not found for skill "{skill_name}".'
+
+                # 使用 subprocess 执行脚本
+
+                self.context.log('info', f'Executing script "{script_name}" for skill "{skill_name}".')
+                try:
+                    result = subprocess.run(['python', script_path], capture_output=True, text=True, check=True)
+                    self.context.log('info', f'Script "{script_name}" executed successfully for skill "{skill_name}".')
+                    return f'Script output:\n{result.stdout}'
+                except subprocess.CalledProcessError as e:
+                    self.context.log('error', f'Error occurred while executing script "{script_name}" for skill "{skill_name}": {e}')
+                    return f'Error occurred while executing script "{script_name}" for skill "{skill_name}": {e}'
+            except Exception as e:
+                self.context.log('error', f'Unexpected error while executing script "{script_name}" for skill "{skill_name}": {e}')
+                return f'Unexpected error while executing script "{script_name}" for skill "{skill_name}": {e}'
         
         
         elif name == 'fetch_skill_resource':
-            skill_name = params.get('skill_name', '').strip()
-            resource_name = params.get('resource_name', '').strip()
-            if not skill_name or not resource_name:
-                self.context.log('warning', 'fetch_skill_resource called without skill_name or resource_name')
-                return 'Skill name and resource name cannot be empty.'
-            skill_path = self.context.storage.get(f'skills', {}).get(skill_name, {}).get('path')
-            if not skill_path:
-                self.context.log('warning', f'Skill "{skill_name}" not found for fetching resource.')
-                return f'Skill "{skill_name}" not found.'
-            resource_path = os.path.join(os.getcwd(), skill_path, 'references', resource_name)
-            if not os.path.exists(resource_path):
-                self.context.log('warning', f'Resource "{resource_name}" not found for skill "{skill_name}".')
-                return f'Resource "{resource_name}" not found for skill "{skill_name}".'
-            with open(resource_path, 'r', encoding='utf-8') as f:
-                content = f.read()
-            self.context.log('info', f'Fetched resource "{resource_name}" for skill "{skill_name}".')
-            return content
+            try:
+                skill_name = params.get('skill_name', '').strip()
+                resource_name = params.get('resource_name', '').strip()
+                if not skill_name or not resource_name:
+                    self.context.log('warning', 'fetch_skill_resource called without skill_name or resource_name')
+                    return 'Skill name and resource name cannot be empty.'
+                skill_path = self.context.storage.get(f'skills').get(skill_name).get('path')
+                if not skill_path:
+                    self.context.log('warning', f'Skill "{skill_name}" not found for fetching resource.')
+                    return f'Skill "{skill_name}" not found.'
+                resource_path = os.path.join(os.getcwd(), skill_path, 'references', resource_name)
+                if not os.path.exists(resource_path):
+                    self.context.log('warning', f'Resource "{resource_name}" not found for skill "{skill_name}".')
+                    return f'Resource "{resource_name}" not found for skill "{skill_name}".'
+                with open(resource_path, 'r', encoding='utf-8') as f:
+                    content = f.read()
+                self.context.log('info', f'Fetched resource "{resource_name}" for skill "{skill_name}".')
+                return content
+            except Exception as e:
+                self.context.log('error', f'Error fetching resource "{resource_name}" for skill "{skill_name}": {e}')
+                return f'Error fetching resource "{resource_name}" for skill "{skill_name}": {e}'
 
         return 'Unknown tool.'
 
