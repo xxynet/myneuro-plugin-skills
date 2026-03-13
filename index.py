@@ -126,21 +126,17 @@ class SkillsPlugin(Plugin):
             {
                 'type': 'function',
                 'function': {
-                    'name': 'execute_skill_script',
-                    'description': 'Execute a skill script by its name',
+                    'name': 'execute_shell_command',
+                    'description': 'Execute a shell command specifically for a skill.',
                     'parameters': {
                         'type': 'object',
                         'properties': {
-                            'skill_name': {
+                            'shell_command': {
                                 'type': 'string',
-                                'description': 'Skill name'
+                                'description': 'The shell command to execute'
                             },
-                            'script_name': {
-                                'type': 'string',
-                                'description': 'Script name, e.g. main.py, do not include `scripts/` prefix'
-                            }
                         },
-                        'required': ['skill_name', 'script_name']
+                        'required': ['shell_command']
                     }
                 }
             },
@@ -156,12 +152,12 @@ class SkillsPlugin(Plugin):
                                 'type': 'string',
                                 'description': 'Skill name'
                             },
-                            'resource_name': {
+                            'resource_path': {
                                 'type': 'string',
-                                'description': 'Resource name, e.g. pdf_spec.md, do not include `references/` prefix'
+                                'description': 'Resource relative path, e.g. references/pdf_spec.md, workflows/xxx.md'
                             }
                         },
-                        'required': ['skill_name', 'resource_name']
+                        'required': ['skill_name', 'resource_path']
                     }
                 }
             }
@@ -202,59 +198,49 @@ class SkillsPlugin(Plugin):
                 return f'Error fetching skill "{skill_name}": {e}'
         
 
-        elif name == 'execute_skill_script':
+        elif name == 'execute_shell_command':
             try:
-                skill_name = params.get('skill_name', '').strip()
-                script_name = params.get('script_name', '').strip()
-                if not skill_name or not script_name:
-                    self.context.log('warning', 'execute_skill_script called without skill_name or script_name')
-                    return 'Skill name and script name cannot be empty.'
-                skill_path = self.context.storage.get('skills').get(skill_name).get('path')
-                if not skill_path:
-                    self.context.log('warning', f'Skill "{skill_name}" not found for executing script.')
-                    return f'Skill "{skill_name}" not found.'
-                script_path = os.path.join(os.getcwd(), skill_path, 'scripts', script_name)
-                if not os.path.exists(script_path):
-                    self.context.log('warning', f'Script "{script_name}" not found for skill "{skill_name}".')
-                    return f'Script "{script_name}" not found for skill "{skill_name}".'
-
-                # 使用 subprocess 执行脚本
-
-                self.context.log('info', f'Executing script "{script_name}" for skill "{skill_name}".')
-                try:
-                    result = subprocess.run(['python', script_path], capture_output=True, text=True, check=True)
-                    self.context.log('info', f'Script "{script_name}" executed successfully for skill "{skill_name}".')
-                    return f'Script output:\n{result.stdout}'
-                except subprocess.CalledProcessError as e:
-                    self.context.log('error', f'Error occurred while executing script "{script_name}" for skill "{skill_name}": {e}')
-                    return f'Error occurred while executing script "{script_name}" for skill "{skill_name}": {e}'
+                shell_command = params.get('shell_command', '').strip()
+                if not shell_command:
+                    self.context.log('warning', 'execute_shell_command called without shell_command')
+                    return 'Shell command cannot be empty.'
+                # Execute the shell command directly
+                self.context.log('info', f'Executing shell command: {shell_command}')
+                result = subprocess.run(shell_command, shell=True, capture_output=True, text=True)
+                if result.returncode == 0:
+                    self.context.log('info', f'Shell command executed successfully: {shell_command}')
+                    self.context.log('info', f'Shell command output:\n{result.stdout}')
+                    return f'Shell command output:\n{result.stdout}'
+                else:
+                    self.context.log('error', f'Error occurred while executing shell command: {shell_command}')
+                    return f'Error occurred while executing shell command: {shell_command}'
             except Exception as e:
-                self.context.log('error', f'Unexpected error while executing script "{script_name}" for skill "{skill_name}": {e}')
-                return f'Unexpected error while executing script "{script_name}" for skill "{skill_name}": {e}'
-        
+                self.context.log('error', f'Unexpected error while executing shell command: {e}')
+                return f'Unexpected error while executing shell command: {e}'
+
         
         elif name == 'fetch_skill_resource':
             try:
                 skill_name = params.get('skill_name', '').strip()
-                resource_name = params.get('resource_name', '').strip()
-                if not skill_name or not resource_name:
-                    self.context.log('warning', 'fetch_skill_resource called without skill_name or resource_name')
-                    return 'Skill name and resource name cannot be empty.'
+                resource_path = params.get('resource_path', '').strip()
+                if not skill_name or not resource_path:
+                    self.context.log('warning', 'fetch_skill_resource called without skill_name or resource_path')
+                    return 'Skill name and resource path cannot be empty.'
                 skill_path = self.context.storage.get(f'skills').get(skill_name).get('path')
                 if not skill_path:
                     self.context.log('warning', f'Skill "{skill_name}" not found for fetching resource.')
                     return f'Skill "{skill_name}" not found.'
-                resource_path = os.path.join(os.getcwd(), skill_path, 'references', resource_name)
+                resource_path = os.path.join(os.getcwd(), skill_path, resource_path)
                 if not os.path.exists(resource_path):
-                    self.context.log('warning', f'Resource "{resource_name}" not found for skill "{skill_name}".')
-                    return f'Resource "{resource_name}" not found for skill "{skill_name}".'
+                    self.context.log('warning', f'Resource "{resource_path}" not found for skill "{skill_name}".')
+                    return f'Resource "{resource_path}" not found for skill "{skill_name}".'
                 with open(resource_path, 'r', encoding='utf-8') as f:
                     content = f.read()
-                self.context.log('info', f'Fetched resource "{resource_name}" for skill "{skill_name}".')
+                self.context.log('info', f'Fetched resource "{resource_path}" for skill "{skill_name}".')
                 return content
             except Exception as e:
-                self.context.log('error', f'Error fetching resource "{resource_name}" for skill "{skill_name}": {e}')
-                return f'Error fetching resource "{resource_name}" for skill "{skill_name}": {e}'
+                self.context.log('error', f'Error fetching resource "{resource_path}" for skill "{skill_name}": {e}')
+                return f'Error fetching resource "{resource_path}" for skill "{skill_name}": {e}'
 
         return 'Unknown tool.'
 
