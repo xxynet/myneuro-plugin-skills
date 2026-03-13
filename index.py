@@ -206,7 +206,7 @@ class SkillsPlugin(Plugin):
                     return 'Shell command cannot be empty.'
                 # Execute the shell command directly
                 self.context.log('info', f'Executing shell command: {shell_command}')
-                result = subprocess.run(shell_command, shell=True, capture_output=True, text=True)
+                result = subprocess.run(shell_command, shell=True, capture_output=True, text=True, timeout=10)
                 if result.returncode == 0:
                     self.context.log('info', f'Shell command executed successfully: {shell_command}')
                     self.context.log('info', f'Shell command output:\n{result.stdout}')
