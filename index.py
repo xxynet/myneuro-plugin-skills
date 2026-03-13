@@ -173,7 +173,7 @@ class SkillsPlugin(Plugin):
                 if not skills:
                     self.context.log('info', 'No skills available.')
                     return 'No skills available.'
-                skill_list = '\n'.join([f"- {name}: {info['description']}" for name, info in skills.items()])
+                skill_list = '\n'.join([f"- {name}: {info['description']} (path: {info['path']})" for name, info in skills.items()])
                 self.context.log('info', f'Available skills:\n{skill_list}')
                 return skill_list
             except Exception as e:
