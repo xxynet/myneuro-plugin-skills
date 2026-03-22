@@ -2,7 +2,7 @@
   "name": "myneuro-plugin-skills",
   "displayName": "Skills",
   "description": "A plugin to manage and fetch SKILLs.",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "author": "xxynet",
   "lang": "python",
   "main": "index.py"
