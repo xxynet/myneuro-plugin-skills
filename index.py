@@ -260,6 +260,11 @@ class SkillsPlugin(Plugin):
                 return f'Error fetching skill "{skill_name}": {e}'
 
         elif tool_name == 'execute_shell_command':
+            cfg = self.context.get_plugin_config()
+            shell_enabled = cfg.get("shell_tool", False)
+            if not shell_enabled:
+                self.context.log('warning', 'execute_shell_command called but shell_tool is disabled in config')
+                return 'Shell command execution is disabled in the plugin configuration.'
             shell_command = ''
             try:
                 shell_command = params.get('shell_command', '').strip()
