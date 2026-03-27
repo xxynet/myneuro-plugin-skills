@@ -268,6 +268,16 @@ class SkillsPlugin(Plugin):
             shell_command = ''
             try:
                 shell_command = params.get('shell_command', '').strip()
+
+                blacklist_raw = cfg.get("shell_blacklist", "") or ""
+                blacklist = [item.strip() for item in blacklist_raw.split(',') if item.strip()]
+                if blacklist:
+                    cmd_lower = shell_command.lower()
+                    for blocked in blacklist:
+                        blocked_lower = blocked.lower()
+                        if cmd_lower == blocked_lower or cmd_lower.startswith(blocked_lower + ' ') or cmd_lower.startswith(blocked_lower + '\t'):
+                            self.context.log('warning', f'Shell command blocked by blacklist rule "{blocked}": {shell_command}')
+                            return f'Shell command blocked by blacklist: "{blocked}" is not allowed.'
                 work_dir = params.get('cwd', '').strip() if params.get('cwd') else ''
 
                 if shell_command and work_dir and os.path.isdir(shell_command) and not os.path.isdir(work_dir):

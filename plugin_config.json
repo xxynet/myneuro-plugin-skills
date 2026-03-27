@@ -4,5 +4,11 @@
     "description": "是否允许 LLM 使用 Shell 工具执行 Skills 中的脚本或其他命令",
     "type": "bool",
     "default": false
+  },
+  "shell_blacklist": {
+    "title": "Shell 指令黑名单",
+    "description": "禁止执行的 Shell 指令前缀或关键字，多个用英文逗号分隔，例如：rm,del,format,shutdown",
+    "type": "string",
+    "default": ""
   }
 }
